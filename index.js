@@ -11,8 +11,9 @@ const GATEWAY_SECRET = process.env.GATEWAY_SECRET;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com";
 
 function requireAuth(req, res, next) {
-  const auth = req.headers["x-gateway-secret"];
-  if (!GATEWAY_SECRET || auth !== GATEWAY_SECRET) {
+  const auth = String(req.headers["x-gateway-secret"] || "").trim();
+  const expected = String(GATEWAY_SECRET || "").trim();
+  if (!expected || auth !== expected) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   if (!OPENAI_API_KEY) {
@@ -42,7 +43,10 @@ async function proxyOpenAI(path, req, res) {
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    service: "railway-ai-gateway"
+    service: "railway-ai-gateway",
+    hasGatewaySecret: Boolean(GATEWAY_SECRET),
+    gatewaySecretLength: GATEWAY_SECRET ? String(GATEWAY_SECRET).trim().length : 0,
+    hasOpenAIKey: Boolean(OPENAI_API_KEY)
   });
 });
 
@@ -63,4 +67,3 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`AI Gateway running on port ${port}`);
 });
-
