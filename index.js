@@ -74,7 +74,6 @@ app.get("/", (req, res) => {
     status: "ok",
     service: SERVICE_NAME,
     hasGatewaySecret: Boolean(GATEWAY_SECRET),
-    gatewaySecretLength: GATEWAY_SECRET ? String(GATEWAY_SECRET).trim().length : 0,
     hasOpenAIKey: Boolean(OPENAI_API_KEY)
   });
 });
