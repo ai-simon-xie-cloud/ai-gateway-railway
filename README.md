@@ -18,6 +18,7 @@ GET  /health
 GET  /v1/models
 POST /v1/chat/completions
 POST /v1/images/generations
+POST /v1/images/edits
 POST /v1/responses
 POST /v1/embeddings
 ```

@@ -14,6 +14,7 @@ const SERVICE_NAME = "railway-ai-gateway";
 const ALLOWED_ENDPOINTS = new Set([
   "/v1/chat/completions",
   "/v1/images/generations",
+  "/v1/images/edits",
   "/v1/responses",
   "/v1/embeddings"
 ]);
@@ -112,6 +113,52 @@ app.post("/v1/images/generations", requireAuth, async (req, res) => {
   return proxyOpenAI("/v1/images/generations", req, res);
 });
 
+app.post("/v1/images/edits", requireAuth, async (req, res) => {
+  try {
+    const form = new FormData();
+    const body = req.body || {};
+
+    appendField(form, "model", body.model || "gpt-image-2");
+    appendField(form, "prompt", body.prompt || body.instruction || "");
+    appendOptionalField(form, "size", body.size);
+    appendOptionalField(form, "quality", body.quality);
+    appendOptionalField(form, "output_format", body.output_format);
+
+    const images = Array.isArray(body.images_b64)
+      ? body.images_b64
+      : body.image_b64
+        ? [body.image_b64]
+        : [];
+    if (!images.length) {
+      return res.status(400).json({ error: "images_b64 or image_b64 is required" });
+    }
+
+    images.forEach((item, index) => {
+      const normalized = normalizeB64File(item, `image-${index + 1}.png`);
+      form.append("image[]", normalized.blob, normalized.filename);
+    });
+
+    if (body.mask_b64) {
+      const normalizedMask = normalizeB64File(body.mask_b64, "mask.png");
+      form.append("mask", normalizedMask.blob, normalizedMask.filename);
+    }
+
+    const response = await fetch(`${OPENAI_BASE_URL}/v1/images/edits`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`
+      },
+      body: form
+    });
+
+    copyResponseHeaders(response, res);
+    res.status(response.status);
+    return res.send(await response.text());
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/v1/responses", requireAuth, async (req, res) => {
   return proxyOpenAI("/v1/responses", req, res);
 });
@@ -129,6 +176,32 @@ app.listen(port, () => {
 function parseBearer(value) {
   const auth = String(value || "").trim();
   return auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
+}
+
+function appendField(form, name, value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    throw new Error(`${name} is required`);
+  }
+  form.append(name, text);
+}
+
+function appendOptionalField(form, name, value) {
+  if (value !== undefined && value !== null && String(value).trim() !== "") {
+    form.append(name, String(value));
+  }
+}
+
+function normalizeB64File(value, fallbackName) {
+  const item = typeof value === "string" ? { b64: value } : value || {};
+  const b64 = String(item.b64 || item.data || item.b64_json || "").replace(/^data:[^;]+;base64,/, "");
+  if (!b64) {
+    throw new Error("image b64 payload is empty");
+  }
+  const buffer = Buffer.from(b64, "base64");
+  const mime = item.mime || item.content_type || "image/png";
+  const filename = item.filename || fallbackName;
+  return { blob: new Blob([buffer], { type: mime }), filename };
 }
 
 function copyResponseHeaders(response, res) {
